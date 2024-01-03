@@ -1,11 +1,12 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import React, { useState, useEffect } from 'react'
-import openseaLogo from '../assets/opensea.png'
 import ordiPointLogo from '../assets/ordipoint.png'
 import { useRouter } from 'next/router'
 import { useWeb3 } from '@3rdweb/hooks'
-import Connect from './Connect'
+import PlugConnect from '@psychedelic/plug-connect'
+import { idlFactory } from './idlFactory.did.js'
+import { Principal } from '@dfinity/principal'
 
 const style = {
   accentedButton: ` relative text-lg font-semibold px-4 py-2 bg-[#2181e2] rounded-3xl  text-white hover:bg-[#42a0ff] cursor-pointer`,
@@ -21,58 +22,55 @@ const style = {
 }
 
 const Header = () => {
-  const { address, chainId, provider, disconnectWallet, connectWallet } =
-    useWeb3()
-  const [connected, setConnected] = useState(false)
+  // const { address, chainId, provider, disconnectWallet, connectWallet } =
+  //   useWeb3()
   const [activeLink, setActiveLink] = useState('/')
+  const [address, setAddress] = useState('')
   const router = useRouter()
   const active = 'text-white'
   const notactive = 'text-[#c8cacd]'
-  const [principalId, setPrincipalId] = useState('')
-  const [selectedCoin, setSelectedCoin] = useState('')
-  const [actor, setActor] = useState(false)
+  let whitelist = ['xsffd-7qaaa-aaaar-qacta-cai']
 
   useEffect(() => {
     setActiveLink(router.pathname)
-    console.log(chainId)
-  }, [router.pathname, chainId])
+    // console.log(chainId)
+  }, [router.pathname])
 
-  const handleConnect = async () => {
-    setConnected(true)
-
-    if (!window.ic.plug.agent) {
-      const whitelist = ['xsffd-7qaaa-aaaar-qacta-cai']
-      await window.ic?.plug?.createAgent(whitelist)
+  const verifyConnectionAndAgent = async () => {
+    const connected = await window.ic.plug.isConnected()
+    console.log(connected)
+    console.log(window.ic.plug.principalId)
+    if (window.ic.plug.principalId) {
+      const add = `${window.ic.plug.principalId.slice(
+        0,
+        6
+      )}...${window.ic.plug.principalId.slice(-4)}`
+      setAddress(add)
     }
 
-    // Create an actor to interact with the NNS Canister
-    // we pass the NNS Canister id and the interface factory
+    if (!connected) window.ic.plug.requestConnect({ whitelist })
+    if (connected && !window.ic.plug.agent) {
+      window.ic.plug.createAgent({ whitelist })
+    }
+    // await window?.ic?.plug?.requestConnect({
+    //   whitelist,
+    // })
+
     const NNSUiActor = await window.ic.plug.createActor({
       canisterId: 'xsffd-7qaaa-aaaar-qacta-cai',
       interfaceFactory: idlFactory,
     })
+    const principal = Principal.fromText(
+      'hda74-hg2vk-bv5bx-wosfd-vgexp-v36ta-yyy7k-6zcbl-6v36n-2wh3d-yqe'
+    )
+    const stats = await NNSUiActor.balanceOf(principal)
 
-    setActor(NNSUiActor)
+    console.log('NNS stats', stats)
   }
+
   useEffect(async () => {
-    if (!window.ic?.plug?.agent) {
-      setActor(false)
-      setConnected(false)
-      window.location.hash = '/connect'
-    }
+    verifyConnectionAndAgent()
   }, [])
-
-  useEffect(async () => {
-    if (connected) {
-      const principal = await window.ic.plug.agent.getPrincipal()
-
-      if (principal) {
-        setPrincipalId(principal.toText())
-      }
-    } else {
-      window.location.hash = '/connect'
-    }
-  }, [connected])
 
   return (
     <div className={style.wrapper}>
@@ -144,7 +142,12 @@ const Header = () => {
           </button>
         )}
       </div> */}
-      <Connect handleConnect={handleConnect} />
+      <PlugConnect
+        dark
+        whitelist={['xsffd-7qaaa-aaaar-qacta-cai']}
+        title={address ? address : 'Connect to Plug'}
+        onConnectCallback={verifyConnectionAndAgent}
+      />
     </div>
   )
 }
